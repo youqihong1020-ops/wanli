@@ -1,0 +1,964 @@
+import { useState, useEffect } from 'react';
+import { 
+  Upload, 
+  Download, 
+  User, 
+  LogOut, 
+  Lock, 
+  Plus, 
+  Star, 
+  Image, 
+  FileText, 
+  Loader,
+  Settings,
+  Shield,
+  Database,
+  Users,
+  ChevronLeft,
+  ChevronRight
+} from "lucide-react";
+
+export default function App() {
+  // ============== 状态管理 ==============
+  const [materials, setMaterials] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(null);
+  const [activeTab, setActiveTab] = useState('home');
+  const [modal, setModal] = useState(null);
+  const [file, setFile] = useState(null);
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [preview, setPreview] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [usersPerPage] = useState(8);
+
+  // ============== 初始化数据 ==============
+  useEffect(() => {
+    // 预设管理员账号 (实际应用中应通过安全方式存储)
+    const adminUser = {
+      id: 1,
+      username: "admin",
+      password: "admin123", // 仅用于演示，实际应加密
+      isAdmin: true,
+      isMember: true,
+      avatar: "https://placehold.co/40x40/6366f1/ffffff?text=ADMIN"
+    };
+
+    // 预设素材
+    const sampleMaterials = [
+      {
+        id: 1,
+        title: "山水风景高清图",
+        type: "image",
+        url: "https://placehold.co/600x400/3b82f6/ffffff?text=山水风景",
+        description: "4K分辨率山水风景摄影，适合壁纸和设计背景",
+        uploader: "admin",
+        date: "2023-12-15"
+      },
+      {
+        id: 2,
+        title: "商务PPT模板",
+        type: "document",
+        url: "https://placehold.co/600x400/10b981/ffffff?text=PPT模板",
+        description: "现代简约风格商务演示模板，含20+幻灯片",
+        uploader: "admin",
+        date: "2023-12-10"
+      },
+      {
+        id: 3,
+        title: "抽象背景素材",
+        type: "image",
+        url: "https://placehold.co/600x400/8b5cf6/ffffff?text=抽象背景",
+        description: "渐变色抽象背景，适用于UI设计和海报制作",
+        uploader: "admin",
+        date: "2023-12-05"
+      }
+    ];
+
+    // 预设测试用户
+    const testUsers = [
+      {
+        id: 2,
+        username: "user1",
+        password: "user123",
+        isAdmin: false,
+        isMember: true,
+        avatar: "https://placehold.co/40x40/93c5fd/ffffff?text=U1"
+      },
+      {
+        id: 3,
+        username: "user2",
+        password: "user123",
+        isAdmin: false,
+        isMember: false,
+        avatar: "https://placehold.co/40x40/fbbf24/ffffff?text=U2"
+      }
+    ];
+
+    setMaterials(sampleMaterials);
+    setUsers([adminUser, ...testUsers]);
+  }, []);
+
+  // ============== 认证功能 ==============
+  const handleLogin = (username, password) => {
+    const user = users.find(u => u.username === username && u.password === password);
+    if (user) {
+      setCurrentUser(user);
+      setModal(null);
+      return true;
+    }
+    alert("用户名或密码错误");
+    return false;
+  };
+
+  const handleRegister = (username, password) => {
+    if (users.some(u => u.username === username)) {
+      alert("用户名已存在");
+      return false;
+    }
+    
+    const newUser = {
+      id: Date.now(),
+      username,
+      password,
+      isAdmin: false,
+      isMember: false, // 新用户默认无下载权限
+      avatar: `https://placehold.co/40x40/3b82f6/ffffff?text=${username.charAt(0).toUpperCase()}`
+    };
+    
+    setUsers(prev => [...prev, newUser]);
+    setCurrentUser(newUser);
+    setModal(null);
+    return true;
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    setActiveTab('home');
+  };
+
+  // ============== 素材管理 ==============
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      
+      // 生成图片预览
+      if (selectedFile.type.startsWith('image/')) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          setPreview(reader.result);
+        };
+        reader.readAsDataURL(selectedFile);
+      } else {
+        setPreview(null);
+      }
+    }
+  };
+
+  const handleUpload = (e) => {
+    e.preventDefault();
+    if (!currentUser?.isAdmin) {
+      alert("只有管理员可以上传素材");
+      return;
+    }
+    if (!file || !title.trim()) return;
+    
+    setLoading(true);
+    
+    // 模拟上传延迟
+    setTimeout(() => {
+      const newMaterial = {
+        id: Date.now(),
+        title: title.trim(),
+        description: description.trim() || '无描述',
+        type: file.type.startsWith('image/') ? 'image' : 'document',
+        url: preview || `https://placehold.co/600x400/6366f1/ffffff?text=${encodeURIComponent(title.trim())}`,
+        uploader: currentUser.username,
+        date: new Date().toISOString().split('T')[0]
+      };
+      
+      setMaterials(prev => [newMaterial, ...prev]);
+      resetUploadModal();
+      setLoading(false);
+      alert("素材上传成功！");
+    }, 1500);
+  };
+
+  const handleDownload = (material) => {
+    if (!currentUser) {
+      setModal('login');
+      return;
+    }
+    
+    if (!currentUser.isMember && !currentUser.isAdmin) {
+      alert("您没有下载权限，请联系管理员开通权限");
+      return;
+    }
+    
+    // 模拟下载
+    alert(`正在下载: ${material.title}\n\n(演示模式: 实际应用中此处会触发文件下载)`);
+  };
+
+  // ============== 用户权限管理 ==============
+  const toggleUserPermission = (userId) => {
+    setUsers(prev => prev.map(user => 
+      user.id === userId ? {...user, isMember: !user.isMember} : user
+    ));
+  };
+
+  // ============== 辅助函数 ==============
+  const resetUploadModal = () => {
+    setFile(null);
+    setTitle('');
+    setDescription('');
+    setPreview(null);
+  };
+
+  // 获取当前页面的用户
+  const indexOfLastUser = currentPage * usersPerPage;
+  const indexOfFirstUser = indexOfLastUser - usersPerPage;
+  const currentUsers = users
+    .filter(user => !user.isAdmin) // 隐藏管理员账号
+    .slice(indexOfFirstUser, indexOfLastUser);
+
+  const totalPages = Math.ceil(users.filter(u => !u.isAdmin).length / usersPerPage);
+
+  // ============== 界面组件 ==============
+  const MaterialCard = ({ material }) => {
+    const canDownload = currentUser?.isMember || currentUser?.isAdmin;
+    
+    return (
+      <div className="bg-white rounded-xl shadow-md overflow-hidden border border-gray-100 hover:shadow-lg transition-shadow">
+        <div className="relative h-48 overflow-hidden">
+          <img 
+            src={material.url} 
+            alt={material.title} 
+            className="w-full h-full object-cover"
+          />
+          <div className="absolute top-2 right-2 bg-blue-600 text-white text-xs font-bold px-2 py-1 rounded flex items-center">
+            <Shield className="w-3 h-3 mr-1" />
+            管理员上传
+          </div>
+        </div>
+        
+        <div className="p-4">
+          <div className="flex justify-between items-start mb-2">
+            <h3 className="font-bold text-lg text-gray-800 line-clamp-1">{material.title}</h3>
+            <div className="flex-shrink-0">
+              {material.type === 'image' ? (
+                <Image className="w-5 h-5 text-blue-500" />
+              ) : (
+                <FileText className="w-5 h-5 text-green-500" />
+              )}
+            </div>
+          </div>
+          
+          <p className="text-gray-600 text-sm mb-3 line-clamp-2">{material.description}</p>
+          
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center">
+              <div className="w-6 h-6 rounded-full bg-blue-100 flex items-center justify-center mr-2">
+                <span className="text-xs font-bold text-blue-600">
+                  {material.uploader.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <span className="text-gray-500">管理员: {material.uploader}</span>
+            </div>
+            <span className="text-gray-400">{material.date}</span>
+          </div>
+          
+          <button
+            onClick={() => handleDownload(material)}
+            disabled={!canDownload && !currentUser?.isAdmin}
+            className={`mt-4 w-full py-2 rounded-lg font-medium flex items-center justify-center transition-colors ${
+              canDownload || currentUser?.isAdmin
+                ? 'bg-blue-600 hover:bg-blue-700 text-white'
+                : 'bg-gray-200 text-gray-500 cursor-not-allowed'
+            }`}
+          >
+            {canDownload || currentUser?.isAdmin ? (
+              <>
+                <Download className="w-4 h-4 mr-2" />
+                下载素材
+              </>
+            ) : (
+              <>
+                <Lock className="w-4 h-4 mr-2" />
+                需要权限
+              </>
+            )}
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const UserPermissionRow = ({ user }) => (
+    <tr className="border-b border-gray-200 hover:bg-gray-50">
+      <td className="py-3 px-4 flex items-center">
+        <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-3">
+          <span className="font-bold text-blue-600">{user.username.charAt(0).toUpperCase()}</span>
+        </div>
+        <div>
+          <div className="font-medium text-gray-800">{user.username}</div>
+          <div className="text-xs text-gray-500">注册时间: {new Date().toLocaleDateString()}</div>
+        </div>
+      </td>
+      <td className="py-3 px-4">
+        <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+          user.isMember ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+        }`}>
+          {user.isMember ? '已授权' : '未授权'}
+        </span>
+      </td>
+      <td className="py-3 px-4">
+        <button
+          onClick={() => toggleUserPermission(user.id)}
+          className={`px-4 py-1.5 rounded-lg font-medium text-sm transition-colors ${
+            user.isMember
+              ? 'bg-red-500 hover:bg-red-600 text-white'
+              : 'bg-green-500 hover:bg-green-600 text-white'
+          }`}
+        >
+          {user.isMember ? '取消权限' : '授权下载'}
+        </button>
+      </td>
+    </tr>
+  );
+
+  // ============== 管理员后台 ==============
+  const AdminPanel = () => {
+    if (!currentUser?.isAdmin) {
+      return (
+        <div className="text-center py-16">
+          <Shield className="w-16 h-16 text-gray-400 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-gray-800 mb-2">权限不足</h2>
+          <p className="text-gray-600 mb-6">只有管理员可以访问后台</p>
+          <button 
+            onClick={handleLogout}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition-colors"
+          >
+            返回首页
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <h1 className="text-2xl font-bold text-gray-800 flex items-center">
+            <Shield className="w-6 h-6 mr-2 text-blue-600" />
+            管理员控制台
+          </h1>
+          <div className="flex items-center bg-blue-50 text-blue-700 text-sm px-3 py-1 rounded-full">
+            <User className="w-4 h-4 mr-2" />
+            当前管理员: {currentUser.username}
+          </div>
+        </div>
+        
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* 用户管理 */}
+          <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+            <div className="p-5 border-b border-gray-200 flex justify-between items-center">
+              <div className="flex items-center">
+                <Users className="w-5 h-5 text-blue-500 mr-2" />
+                <h2 className="font-bold text-lg text-gray-800">用户权限管理</h2>
+              </div>
+              <span className="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full">
+                {users.filter(u => !u.isAdmin).length} 个用户
+              </span>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-gray-200">
+                <thead className="bg-gray-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">用户</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
+                  </tr>
+                </thead>
+                <tbody className="bg-white divide-y divide-gray-200">
+                  {currentUsers.map(user => (
+                    <UserPermissionRow key={user.id} user={user} />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* 分页 */}
+            {totalPages > 1 && (
+              <div className="px-4 py-3 bg-gray-50 border-t border-gray-200 flex justify-between items-center">
+                <button 
+                  onClick={() => setCurrentPage(p => Math.max(1, p-1))}
+                  disabled={currentPage === 1}
+                  className="flex items-center px-3 py-1 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  <ChevronLeft className="w-4 h-4 mr-1" />
+                  上一页
+                </button>
+                <span className="text-sm text-gray-700">
+                  第 {currentPage} 页，共 {totalPages} 页
+                </span>
+                <button 
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p+1))}
+                  disabled={currentPage === totalPages}
+                  className="flex items-center px-3 py-1 bg-white border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                >
+                  下一页
+                  <ChevronRight className="w-4 h-4 ml-1" />
+                </button>
+              </div>
+            )}
+          </div>
+          
+          {/* 素材管理 */}
+          <div className="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex items-center">
+                <Database className="w-5 h-5 text-green-500 mr-2" />
+                <h2 className="font-bold text-lg text-gray-800">素材管理</h2>
+              </div>
+            </div>
+            
+            <div className="p-5">
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-5">
+                <div className="flex items-start">
+                  <div className="flex-shrink-0 mt-1">
+                    <Shield className="w-5 h-5 text-blue-600" />
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm text-blue-700">
+                      <span className="font-semibold">重要提示:</span> 只有管理员可以上传素材，所有素材默认需要授权才能下载
+                    </p>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-gradient-to-r from-blue-50 to-blue-100 p-4 rounded-lg">
+                  <div className="text-blue-600 font-bold text-2xl mb-1">{materials.length}</div>
+                  <div className="text-sm text-gray-600">总素材数量</div>
+                </div>
+                <div className="bg-gradient-to-r from-green-50 to-green-100 p-4 rounded-lg">
+                  <div className="text-green-600 font-bold text-2xl mb-1">
+                    {users.filter(u => u.isMember || u.isAdmin).length}
+                  </div>
+                  <div className="text-sm text-gray-600">已授权用户</div>
+                </div>
+              </div>
+              
+              <button 
+                onClick={() => setModal('upload')}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 rounded-lg transition-colors flex items-center justify-center"
+              >
+                <Plus className="w-5 h-5 mr-2" />
+                上传新素材
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  // ============== 模态框 ==============
+  const LoginModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+          <LogOut className="w-6 h-6 mr-2 text-blue-500" />
+          用户登录
+        </h2>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          handleLogin(formData.get('username'), formData.get('password'));
+        }} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+            <input 
+              name="username"
+              type="text" 
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="输入用户名"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+            <input 
+              name="password"
+              type="password" 
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="输入密码"
+              required
+            />
+          </div>
+          <button 
+            type="submit"
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center"
+          >
+            <LogOut className="w-4 h-4 mr-2" />
+            登录
+          </button>
+        </form>
+        <div className="text-center mt-4">
+          <button 
+            onClick={() => setModal('register')}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            还没有账号？立即注册
+          </button>
+        </div>
+        <button 
+          onClick={() => setModal(null)}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+
+  const RegisterModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+          <User className="w-6 h-6 mr-2 text-green-500" />
+          用户注册
+        </h2>
+        <form onSubmit={(e) => {
+          e.preventDefault();
+          const formData = new FormData(e.target);
+          handleRegister(formData.get('username'), formData.get('password'));
+        }} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">用户名</label>
+            <input 
+              name="username"
+              type="text" 
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="创建用户名"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">密码</label>
+            <input 
+              name="password"
+              type="password" 
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="设置密码"
+              required
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">确认密码</label>
+            <input 
+              type="password" 
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="再次输入密码"
+              required
+            />
+          </div>
+          <button 
+            type="submit"
+            className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center"
+          >
+            <User className="w-4 h-4 mr-2" />
+            注册账号
+          </button>
+        </form>
+        <div className="text-center mt-4">
+          <button 
+            onClick={() => setModal('login')}
+            className="text-sm text-blue-600 hover:underline"
+          >
+            已有账号？立即登录
+          </button>
+        </div>
+        <button 
+          onClick={() => setModal(null)}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+
+  const UploadModal = () => (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6">
+        <h2 className="text-2xl font-bold text-gray-800 mb-6 flex items-center">
+          <Upload className="w-6 h-6 mr-2 text-green-500" />
+          上传新素材
+        </h2>
+        <form onSubmit={handleUpload} className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">素材标题</label>
+            <input 
+              type="text" 
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="输入素材标题"
+              required
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">素材描述</label>
+            <textarea 
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              placeholder="描述素材用途和特点"
+              rows="3"
+            />
+          </div>
+          
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">选择文件</label>
+            <div className="flex items-center justify-center w-full">
+              <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-gray-300 border-dashed rounded-lg cursor-pointer bg-gray-50 hover:bg-gray-100">
+                <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                  {preview ? (
+                    <img src={preview} alt="预览" className="max-h-24 rounded" />
+                  ) : (
+                    <>
+                      <Upload className="w-8 h-8 mb-2 text-gray-500" />
+                      <p className="mb-2 text-sm text-gray-500"><span className="font-semibold">点击上传</span> 或拖拽文件</p>
+                      <p className="text-xs text-gray-500">支持格式: PNG, JPG, PDF, DOC (最大10MB)</p>
+                    </>
+                  )}
+                </div>
+                <input 
+                  type="file" 
+                  className="hidden" 
+                  onChange={handleFileChange}
+                  accept="image/*,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                />
+              </label>
+            </div>
+          </div>
+          
+          <div className="flex space-x-3 pt-2">
+            <button 
+              type="button"
+              onClick={resetUploadModal}
+              className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-medium py-2.5 rounded-lg transition-colors"
+            >
+              取消
+            </button>
+            <button 
+              type="submit"
+              disabled={loading || !file || !title.trim()}
+              className={`flex-1 ${
+                loading || !file || !title.trim() 
+                  ? 'bg-blue-300 cursor-not-allowed' 
+                  : 'bg-blue-600 hover:bg-blue-700'
+              } text-white font-medium py-2.5 rounded-lg transition-colors flex items-center justify-center`}
+            >
+              {loading ? (
+                <>
+                  <Loader className="w-5 h-5 mr-2 animate-spin" />
+                  上传中...
+                </>
+              ) : (
+                <>
+                  <Upload className="w-4 h-4 mr-2" />
+                  上传素材
+                </>
+              )}
+            </button>
+          </div>
+        </form>
+        <button 
+          onClick={resetUploadModal}
+          className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
+
+  // ============== 主界面渲染 ==============
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100">
+      {/* 顶部导航栏 */}
+      <header className="bg-white shadow-sm">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center h-16">
+            <div className="flex items-center">
+              <div className="bg-gradient-to-r from-blue-600 to-purple-600 text-white font-bold text-xl px-3 py-1 rounded-lg flex items-center">
+                <Shield className="w-6 h-6 mr-1" />
+                <span>素材资源库</span>
+              </div>
+              <nav className="ml-10 hidden md:flex space-x-8">
+                <button 
+                  onClick={() => setActiveTab('home')}
+                  className={`text-sm font-medium ${
+                    activeTab === 'home' 
+                      ? 'text-blue-600 border-b-2 border-blue-600' 
+                      : 'text-gray-500 hover:text-gray-700'
+                  }`}
+                >
+                  首页
+                </button>
+                {currentUser?.isAdmin && (
+                  <button 
+                    onClick={() => setActiveTab('admin')}
+                    className={`text-sm font-medium ${
+                      activeTab === 'admin' 
+                        ? 'text-blue-600 border-b-2 border-blue-600' 
+                        : 'text-gray-500 hover:text-gray-700'
+                    }`}
+                  >
+                    管理后台
+                  </button>
+                )}
+              </nav>
+            </div>
+            
+            <div className="flex items-center space-x-4">
+              {currentUser ? (
+                <>
+                  {currentUser.isAdmin && (
+                    <button 
+                      onClick={() => setActiveTab('admin')}
+                      className="hidden md:flex items-center bg-blue-100 text-blue-700 hover:bg-blue-200 font-medium py-2 px-4 rounded-lg transition-colors"
+                    >
+                      <Shield className="w-4 h-4 mr-2" />
+                      管理后台
+                    </button>
+                  )}
+                  
+                  <div className="relative group">
+                    <div className="flex items-center cursor-pointer">
+                      <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center mr-2">
+                        {currentUser.avatar ? (
+                          <img 
+                            src={currentUser.avatar} 
+                            alt={currentUser.username} 
+                            className="w-full h-full rounded-full object-cover"
+                          />
+                        ) : (
+                          <span className="text-sm font-bold text-blue-600">
+                            {currentUser.username.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <div className="hidden md:block">
+                        <div className="text-sm font-medium text-gray-800">{currentUser.username}</div>
+                        <div className="text-xs text-gray-500">
+                          {currentUser.isAdmin ? '管理员' : (currentUser.isMember ? '已授权用户' : '普通用户')}
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* 用户菜单 */}
+                    <div className="absolute right-0 mt-2 w-48 bg-white rounded-xl shadow-lg py-1 hidden group-hover:block z-10 border border-gray-100">
+                      {currentUser.isAdmin && (
+                        <button 
+                          onClick={() => setActiveTab('admin')}
+                          className="w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-50 flex items-center"
+                        >
+                          <Shield className="w-4 h-4 mr-2 text-blue-500" />
+                          管理后台
+                        </button>
+                      )}
+                      <button 
+                        onClick={handleLogout}
+                        className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+                      >
+                        <LogOut className="w-4 h-4 mr-2" />
+                        退出登录
+                      </button>
+                    </div>
+                  </div>
+                </>
+              ) : (
+                <button 
+                  onClick={() => setModal('login')}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center"
+                >
+                  <User className="w-4 h-4 mr-2" />
+                  登录
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* 英雄区域 */}
+      <div className="relative bg-gradient-to-r from-blue-600 to-purple-700 text-white">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 text-center">
+          <h1 className="text-4xl md:text-5xl font-bold mb-6">
+            专业素材资源库
+          </h1>
+          <p className="text-xl text-blue-100 mb-8 max-w-3xl mx-auto">
+            高质量设计素材集中地，由管理员严格审核上传。普通用户可浏览预览，下载权限需管理员授权。
+          </p>
+          
+          {!currentUser && (
+            <div className="flex flex-col sm:flex-row justify-center gap-4">
+              <button 
+                onClick={() => setModal('login')}
+                className="bg-white text-blue-600 font-bold py-3 px-6 rounded-xl hover:bg-gray-100 transition-colors"
+              >
+                <User className="w-5 h-5 mr-2 inline" />
+                用户登录
+              </button>
+              <button 
+                onClick={() => setModal('register')}
+                className="bg-yellow-400 text-gray-900 font-bold py-3 px-6 rounded-xl hover:bg-yellow-300 transition-colors"
+              >
+                <User className="w-5 h-5 mr-2 inline" />
+                免费注册
+              </button>
+            </div>
+          )}
+          
+          {currentUser && !currentUser.isAdmin && (
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 inline-block mt-4">
+              <div className="flex items-center justify-center">
+                <Lock className="w-6 h-6 mr-2 text-yellow-300" />
+                <span className="text-lg font-medium">
+                  {currentUser.isMember ? '您已获得下载权限' : '您尚未获得下载权限'}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 主要内容区域 */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {activeTab === 'home' && (
+          <>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-800">可用素材</h2>
+              <div className="flex items-center bg-gray-100 rounded-full px-3 py-1">
+                <span className="text-sm font-medium text-gray-600 mr-2">当前状态:</span>
+                {currentUser ? (
+                  <div className="flex items-center">
+                    {currentUser.isAdmin ? (
+                      <>
+                        <Shield className="w-4 h-4 text-blue-600 mr-1" />
+                        <span className="text-blue-600 font-medium">管理员</span>
+                      </>
+                    ) : currentUser.isMember ? (
+                      <>
+                        <Star className="w-4 h-4 text-yellow-400 fill-current mr-1" />
+                        <span className="text-green-600 font-medium">已授权用户</span>
+                      </>
+                    ) : (
+                      <>
+                        <Lock className="w-4 h-4 text-gray-400 mr-1" />
+                        <span className="text-gray-600 font-medium">普通用户</span>
+                      </>
+                    )}
+                  </div>
+                ) : (
+                  <span className="text-red-500 font-medium">未登录</span>
+                )}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {materials.map(material => (
+                <MaterialCard key={material.id} material={material} />
+              ))}
+            </div>
+            
+            {materials.length === 0 && (
+              <div className="text-center py-12 bg-white rounded-xl border-2 border-dashed border-gray-300">
+                <Database className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                <h3 className="text-lg font-medium text-gray-700 mb-1">暂无素材</h3>
+                <p className="text-gray-500 mb-4">管理员尚未上传任何素材</p>
+                {currentUser?.isAdmin && (
+                  <button 
+                    onClick={() => setModal('upload')}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg transition-colors"
+                  >
+                    <Upload className="w-4 h-4 mr-2 inline" />
+                    上传第一个素材
+                  </button>
+                )}
+              </div>
+            )}
+          </>
+        )}
+        
+        {activeTab === 'admin' && <AdminPanel />}
+      </div>
+
+      {/* 页脚 */}
+      <footer className="bg-gray-900 text-gray-300 py-10 mt-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+            <div>
+              <div className="text-white font-bold text-xl mb-4 flex items-center">
+                <Shield className="w-6 h-6 mr-1 text-blue-400" />
+                素材资源库
+              </div>
+              <p className="text-gray-400 mb-4">
+                专业素材管理平台，由管理员严格控制上传和下载权限。
+              </p>
+              <p className="text-gray-400 text-sm">
+                © {new Date().getFullYear()} 版权所有。本演示应用仅用于展示功能。
+              </p>
+            </div>
+            
+            <div>
+              <h3 className="text-white font-bold mb-4">功能特点</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li>管理员专属上传权限</li>
+                <li>精细化用户权限控制</li>
+                <li>素材分类管理</li>
+                <li>用户行为审计</li>
+                <li>安全权限体系</li>
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-white font-bold mb-4">权限说明</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li>管理员：完全控制权限</li>
+                <li>授权用户：可下载所有素材</li>
+                <li>普通用户：仅可浏览预览</li>
+                <li>新注册用户：默认无下载权限</li>
+              </ul>
+            </div>
+            
+            <div>
+              <h3 className="text-white font-bold mb-4">管理指南</h3>
+              <ul className="space-y-2 text-gray-400">
+                <li>通过后台授权用户下载权限</li>
+                <li>仅上传高质量、无版权争议素材</li>
+                <li>定期审核用户权限</li>
+                <li>监控素材下载统计</li>
+              </ul>
+            </div>
+          </div>
+          
+          <div className="border-t border-gray-800 mt-8 pt-6 text-center text-gray-500 text-sm">
+            <p>系统版本: 1.0.0 | 管理员后台仅对授权管理员开放</p>
+          </div>
+        </div>
+      </footer>
+
+      {/* 模态框 */}
+      {modal === 'login' && <LoginModal />}
+      {modal === 'register' && <RegisterModal />}
+      {modal === 'upload' && currentUser?.isAdmin && <UploadModal />}
+    </div>
+  );
+}
